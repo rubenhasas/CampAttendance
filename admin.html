@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Prezenta</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Login gate -->
+<div id="loginScreen" class="login-box">
+  <h1>Admin</h1>
+  <input type="password" id="passInput" placeholder="Parola" autofocus>
+  <button class="btn btn-primary" onclick="tryLogin()">Intra</button>
+  <div id="loginError" style="color:#c62828;margin-top:8px;display:none">Parola gresita</div>
+</div>
+
+<!-- Main content -->
+<div id="adminContent" class="container hidden">
+  <h1>Admin Prezenta</h1>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('log')" id="tabLog">Log</button>
+    <button class="tab-btn" onclick="switchTab('attendance')" id="tabAttendance">Prezenta</button>
+    <button class="tab-btn" onclick="switchTab('stats')" id="tabStats">Statistici</button>
+  </div>
+
+  <!-- Log view -->
+  <div id="logView">
+    <div class="filter-bar">
+      <select id="statusFilter">
+        <option value="">Toate</option>
+        <option value="OK">OK</option>
+        <option value="DUPLICAT">DUPLICAT</option>
+        <option value="ID_NECUNOSCUT">ID_NECUNOSCUT</option>
+      </select>
+      <button onclick="loadLog()">Reincarca</button>
+    </div>
+    <div id="logTable"></div>
+  </div>
+
+  <!-- Attendance view -->
+  <div id="attendanceView" class="hidden">
+    <div id="attendanceStats" class="stats"></div>
+    <div class="filter-bar">
+      <button onclick="loadAttendance()">Reincarca</button>
+    </div>
+    <div id="attendanceTable"></div>
+  </div>
+
+  <!-- Stats view -->
+  <div id="statsView" class="hidden">
+    <div class="filter-bar">
+      <button onclick="loadStats()">Reincarca</button>
+    </div>
+    <div id="statsContent"></div>
+  </div>
+
+  <div class="footer">
+    <a href="index.html">Scanner</a>
+    <a id="sheetLink" href="#" target="_blank">Deschide Google Sheet</a>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+  document.getElementById("sheetLink").href = SHEET_URL;
+
+  // Check session
+  if (sessionStorage.getItem("admin_auth") === "1") {
+    showAdmin();
+  }
+
+  document.getElementById("passInput").addEventListener("keydown", function(e) {
+    if (e.key === "Enter") tryLogin();
+  });
+
+  function tryLogin() {
+    const pass = document.getElementById("passInput").value;
+    if (pass === ADMIN_PASS) {
+      sessionStorage.setItem("admin_auth", "1");
+      showAdmin();
+    } else {
+      document.getElementById("loginError").style.display = "block";
+    }
+  }
+
+  function showAdmin() {
+    document.getElementById("loginScreen").style.display = "none";
+    document.getElementById("adminContent").classList.remove("hidden");
+    loadLog();
+  }
+
+  let currentTab = "log";
+
+  function switchTab(tab) {
+    currentTab = tab;
+    document.getElementById("tabLog").classList.toggle("active", tab === "log");
+    document.getElementById("tabAttendance").classList.toggle("active", tab === "attendance");
+    document.getElementById("tabStats").classList.toggle("active", tab === "stats");
+    document.getElementById("logView").classList.toggle("hidden", tab !== "log");
+    document.getElementById("attendanceView").classList.toggle("hidden", tab !== "attendance");
+    document.getElementById("statsView").classList.toggle("hidden", tab !== "stats");
+
+    if (tab === "log") loadLog();
+    else if (tab === "attendance") loadAttendance();
+    else loadStats();
+  }
+
+  function loadLog() {
+    const container = document.getElementById("logTable");
+    container.innerHTML = "<p>Se incarca...</p>";
+
+    fetch(API_URL + "?action=log")
+      .then(r => r.json())
+      .then(data => {
+        const filter = document.getElementById("statusFilter").value;
+        let rows = data.log || [];
+        if (filter) {
+          rows = rows.filter(r => r.status === filter);
+        }
+
+        if (rows.length === 0) {
+          container.innerHTML = "<p>Niciun rezultat.</p>";
+          return;
+        }
+
+        let html = "<table><tr><th>Ora</th><th>ID</th><th>Nume</th><th>Zi</th><th>Status</th></tr>";
+        rows.forEach(r => {
+          const cls = r.status === "OK" ? "status-ok"
+            : r.status === "DUPLICAT" ? "status-duplicat"
+            : "status-necunoscut";
+          html += "<tr><td>" + esc(r.timestamp) + "</td><td>" + esc(r.id) + "</td><td>"
+            + esc(r.name) + "</td><td>" + esc(r.day) + "</td><td class='" + cls + "'>"
+            + esc(r.status) + "</td></tr>";
+        });
+        html += "</table>";
+        container.innerHTML = html;
+      })
+      .catch(() => {
+        container.innerHTML = "<p style='color:#c62828'>Eroare la incarcare.</p>";
+      });
+  }
+
+  function loadAttendance() {
+    const container = document.getElementById("attendanceTable");
+    const stats = document.getElementById("attendanceStats");
+    container.innerHTML = "<p>Se incarca...</p>";
+    stats.innerHTML = "";
+
+    fetch(API_URL + "?action=attendance")
+      .then(r => r.json())
+      .then(data => {
+        const counts = data.counts || {};
+        const total = data.total || 0;
+        stats.innerHTML = "Total inscrisi: " + total + "<br>"
+          + "Luni: " + (counts.Luni || 0)
+          + " | Marti: " + (counts.Marti || 0)
+          + " | Miercuri: " + (counts.Miercuri || 0)
+          + " | Joi: " + (counts.Joi || 0)
+          + " | Vineri: " + (counts.Vineri || 0);
+
+        const rows = data.attendance || [];
+        if (rows.length === 0) {
+          container.innerHTML = "<p>Niciun participant.</p>";
+          return;
+        }
+
+        let html = "<table><tr><th>ID</th><th>Prenume</th><th>Nume</th><th>Echipa</th><th>Varsta</th><th>Sex</th><th>Loc.</th><th>Lu</th><th>Ma</th><th>Mi</th><th>Jo</th><th>Vi</th></tr>";
+        rows.forEach(r => {
+          html += "<tr><td>" + esc(r.id) + "</td><td>" + esc(r.prenume) + "</td>"
+            + "<td>" + esc(r.nume) + "</td><td>" + esc(r.echipa) + "</td>"
+            + "<td>" + esc(String(r.varsta)) + "</td><td>" + esc(r.sex) + "</td>"
+            + "<td>" + esc(r.localitate) + "</td>"
+            + "<td>" + esc(r.luni) + "</td><td>" + esc(r.marti) + "</td>"
+            + "<td>" + esc(r.miercuri) + "</td><td>" + esc(r.joi) + "</td>"
+            + "<td>" + esc(r.vineri) + "</td></tr>";
+        });
+        html += "</table>";
+        container.innerHTML = html;
+      })
+      .catch(() => {
+        container.innerHTML = "<p style='color:#c62828'>Eroare la incarcare.</p>";
+      });
+  }
+
+  document.getElementById("statusFilter").addEventListener("change", loadLog);
+
+  var cachedAttendance = null;
+
+  function loadStats() {
+    const container = document.getElementById("statsContent");
+    container.innerHTML = "<p>Se incarca...</p>";
+
+    fetch(API_URL + "?action=attendance")
+      .then(r => r.json())
+      .then(data => {
+        cachedAttendance = data.attendance || [];
+        renderStats(cachedAttendance);
+      })
+      .catch(() => {
+        container.innerHTML = "<p style='color:#c62828'>Eroare la incarcare.</p>";
+      });
+  }
+
+  function renderStats(rows) {
+    const container = document.getElementById("statsContent");
+    const days = ["luni", "marti", "miercuri", "joi", "vineri"];
+    const dayLabels = ["Luni", "Marti", "Miercuri", "Joi", "Vineri"];
+
+    // Helper: count present per day for a subset of rows
+    function countByDay(subset) {
+      const c = {};
+      days.forEach(d => { c[d] = 0; });
+      subset.forEach(r => {
+        days.forEach(d => { if (r[d]) c[d]++; });
+      });
+      return c;
+    }
+
+    // Build stats tables
+    let html = "";
+
+    // 1. Total prezenti per day
+    html += "<h3>Total prezenti</h3>";
+    html += buildStatsTable([{ label: "Total inscrisi", counts: countByDay(rows), total: rows.length }], dayLabels, days);
+
+    // 2. Per echipa (team)
+    const teams = [...new Set(rows.map(r => r.echipa).filter(Boolean))].sort();
+    if (teams.length > 0) {
+      html += "<h3>Pe echipe</h3>";
+      const teamRows = teams.map(t => {
+        const subset = rows.filter(r => r.echipa === t);
+        return { label: t, counts: countByDay(subset), total: subset.length };
+      });
+      // Total row
+      teamRows.push({ label: "Total", counts: countByDay(rows), total: rows.length, bold: true });
+      html += buildStatsTable(teamRows, dayLabels, days);
+    }
+
+    // 3. Per sex
+    const sexValues = [...new Set(rows.map(r => r.sex).filter(Boolean))].sort();
+    if (sexValues.length > 0) {
+      html += "<h3>Pe sex</h3>";
+      const sexRows = sexValues.map(s => {
+        const subset = rows.filter(r => r.sex === s);
+        return { label: s, counts: countByDay(subset), total: subset.length };
+      });
+      sexRows.push({ label: "Total", counts: countByDay(rows), total: rows.length, bold: true });
+      html += buildStatsTable(sexRows, dayLabels, days);
+    }
+
+    // 4. Per varsta (age)
+    const ages = [...new Set(rows.map(r => r.varsta).filter(v => v !== ""))].sort((a, b) => Number(a) - Number(b));
+    if (ages.length > 0) {
+      html += "<h3>Pe varsta</h3>";
+      const ageRows = ages.map(a => {
+        const subset = rows.filter(r => String(r.varsta) === String(a));
+        return { label: String(a) + " ani", counts: countByDay(subset), total: subset.length };
+      });
+      ageRows.push({ label: "Total", counts: countByDay(rows), total: rows.length, bold: true });
+      html += buildStatsTable(ageRows, dayLabels, days);
+    }
+
+    container.innerHTML = html;
+  }
+
+  function buildStatsTable(statRows, dayLabels, days) {
+    let html = "<table><tr><th></th><th>Inscrisi</th>";
+    dayLabels.forEach(d => { html += "<th>" + d + "</th>"; });
+    html += "</tr>";
+
+    statRows.forEach(r => {
+      const tag = r.bold ? "style='font-weight:700;background:#e8e8e8'" : "";
+      html += "<tr " + tag + "><td><strong>" + esc(r.label) + "</strong></td>";
+      html += "<td>" + r.total + "</td>";
+      days.forEach(d => {
+        html += "<td>" + (r.counts[d] || 0) + "</td>";
+      });
+      html += "</tr>";
+    });
+
+    html += "</table>";
+    return html;
+  }
+
+  function esc(s) {
+    if (!s) return "";
+    const div = document.createElement("div");
+    div.textContent = s;
+    return div.innerHTML;
+  }
+</script>
+</body>
+</html>

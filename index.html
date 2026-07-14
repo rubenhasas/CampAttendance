@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Scanner Prezenta</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Result banner -->
+<div id="banner" class="banner" onclick="dismissBanner()">
+  <div id="bannerText"></div>
+  <div id="bannerSub" class="sub"></div>
+</div>
+
+<div class="container">
+  <h1>Scanner Prezenta</h1>
+
+  <div id="reader"></div>
+
+  <button id="startBtn" class="btn btn-primary" onclick="toggleScanner()">Porneste scanarea</button>
+
+  <div id="spinner" class="spinner">Se inregistreaza...</div>
+
+  <div class="manual-entry">
+    <label for="manualId">Introdu ID manual:</label>
+    <input type="number" id="manualId" inputmode="numeric" pattern="[0-9]*" placeholder="ex: 1001">
+    <button class="btn btn-primary" onclick="submitManual()">Marcheaza prezent</button>
+  </div>
+
+  <div class="footer">
+    <a href="admin.html">Admin</a>
+    <a id="sheetLink" href="#" target="_blank">Deschide Google Sheet</a>
+  </div>
+</div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="config.js"></script>
+<script>
+  // Set sheet link
+  document.getElementById("sheetLink").href = SHEET_URL;
+
+  let scanner = null;
+  let scanning = false;
+  let processing = false;
+  let bannerTimeout = null;
+
+  function toggleScanner() {
+    if (scanning) {
+      stopScanner();
+    } else {
+      startScanner();
+    }
+  }
+
+  function startScanner() {
+    const btn = document.getElementById("startBtn");
+    scanner = new Html5Qrcode("reader");
+    scanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      onScanSuccess,
+      () => {} // ignore scan errors
+    ).then(() => {
+      scanning = true;
+      btn.textContent = "Opreste scanarea";
+      btn.classList.remove("btn-primary");
+      btn.classList.add("btn-secondary");
+    }).catch(err => {
+      showBanner("error", "Eroare camera: " + err, "Verifica permisiunile camerei.");
+    });
+  }
+
+  function stopScanner() {
+    const btn = document.getElementById("startBtn");
+    if (scanner) {
+      scanner.stop().then(() => {
+        scanner.clear();
+        scanning = false;
+        btn.textContent = "Porneste scanarea";
+        btn.classList.remove("btn-secondary");
+        btn.classList.add("btn-primary");
+      });
+    }
+  }
+
+  function onScanSuccess(decodedText) {
+    if (processing) return;
+
+    // Validate: must be a 3-5 digit number
+    const trimmed = decodedText.trim();
+    if (!/^\d{3,5}$/.test(trimmed)) return;
+
+    processing = true;
+    sendId(trimmed);
+  }
+
+  function submitManual() {
+    const input = document.getElementById("manualId");
+    const id = input.value.trim();
+    if (!/^\d{3,5}$/.test(id)) {
+      showBanner("error", "ID invalid", "Introdu un numar de 3-5 cifre.");
+      return;
+    }
+    if (processing) return;
+    processing = true;
+    input.value = "";
+    sendId(id);
+  }
+
+  function sendId(id) {
+    document.getElementById("spinner").classList.add("show");
+
+    fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify({ id: id }),
+      redirect: "follow"
+    })
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById("spinner").classList.remove("show");
+
+      if (data.status === "ok") {
+        const displayName = data.name ? data.name : "ID " + (data.id || id);
+        let sub = "prezent (" + data.day + ", " + data.time + ")";
+        if (!data.name) {
+          sub += "\nNume negasit in tabel — completeaza numele in Sheet";
+        }
+        showBanner("ok", "\u2713 " + displayName, sub);
+        vibrate();
+      } else if (data.status === "duplicate") {
+        const displayName = data.name || "ID " + id;
+        showBanner("duplicate", displayName + " a fost deja scanat", "Prima scanare: " + data.time);
+      } else if (data.status === "unknown_id") {
+        showBanner("error", "ID necunoscut: " + id, "");
+      } else if (data.status === "weekend") {
+        showBanner("error", "Weekend", data.message || "Sistemul functioneaza Luni-Vineri.");
+      } else {
+        showBanner("error", "Eroare", data.message || "Raspuns necunoscut de la server.");
+      }
+    })
+    .catch(err => {
+      document.getElementById("spinner").classList.remove("show");
+      showBanner("error", "Eroare retea", "Verifica conexiunea la internet.");
+    });
+  }
+
+  function showBanner(type, text, sub) {
+    const banner = document.getElementById("banner");
+    const bannerText = document.getElementById("bannerText");
+    const bannerSub = document.getElementById("bannerSub");
+
+    banner.className = "banner show banner-" + type;
+    bannerText.textContent = text;
+    bannerSub.textContent = sub || "";
+
+    clearTimeout(bannerTimeout);
+    bannerTimeout = setTimeout(dismissBanner, 2500);
+  }
+
+  function dismissBanner() {
+    clearTimeout(bannerTimeout);
+    document.getElementById("banner").classList.remove("show");
+    processing = false;
+  }
+
+  function vibrate() {
+    if (navigator.vibrate) {
+      navigator.vibrate(200);
+    }
+  }
+
+  // Allow Enter key on manual input
+  document.getElementById("manualId").addEventListener("keydown", function(e) {
+    if (e.key === "Enter") submitManual();
+  });
+</script>
+</body>
+</html>
