@@ -173,9 +173,9 @@
             + "<td>" + esc(r.nume) + "</td><td>" + esc(r.echipa) + "</td>"
             + "<td>" + esc(String(r.varsta)) + "</td><td>" + esc(r.sex) + "</td>"
             + "<td>" + esc(r.localitate) + "</td>"
-            + "<td>" + esc(r.luni) + "</td><td>" + esc(r.marti) + "</td>"
-            + "<td>" + esc(r.miercuri) + "</td><td>" + esc(r.joi) + "</td>"
-            + "<td>" + esc(r.vineri) + "</td></tr>";
+            + "<td>" + esc(shortTime(r.luni)) + "</td><td>" + esc(shortTime(r.marti)) + "</td>"
+            + "<td>" + esc(shortTime(r.miercuri)) + "</td><td>" + esc(shortTime(r.joi)) + "</td>"
+            + "<td>" + esc(shortTime(r.vineri)) + "</td></tr>";
         });
         html += "</table>";
         container.innerHTML = html;
@@ -283,6 +283,17 @@
 
     html += "</table>";
     return html;
+  }
+
+  function shortTime(val) {
+    if (!val) return "";
+    // If it looks like a Date string, extract HH:mm
+    var d = new Date(val);
+    if (!isNaN(d.getTime())) {
+      return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+    }
+    // Already HH:mm or other string, return as-is
+    return String(val);
   }
 
   function esc(s) {
