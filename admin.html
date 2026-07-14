@@ -8,16 +8,8 @@
 </head>
 <body>
 
-<!-- Login gate -->
-<div id="loginScreen" class="login-box">
-  <h1>Admin</h1>
-  <input type="password" id="passInput" placeholder="Parola" autofocus>
-  <button class="btn btn-primary" onclick="tryLogin()">Intra</button>
-  <div id="loginError" style="color:#c62828;margin-top:8px;display:none">Parola gresita</div>
-</div>
-
 <!-- Main content -->
-<div id="adminContent" class="container hidden">
+<div id="adminContent" class="container">
   <h1>Admin Prezenta</h1>
 
   <div class="tabs">
@@ -66,31 +58,7 @@
 <script src="config.js"></script>
 <script>
   document.getElementById("sheetLink").href = SHEET_URL;
-
-  // Check session
-  if (sessionStorage.getItem("admin_auth") === "1") {
-    showAdmin();
-  }
-
-  document.getElementById("passInput").addEventListener("keydown", function(e) {
-    if (e.key === "Enter") tryLogin();
-  });
-
-  function tryLogin() {
-    const pass = document.getElementById("passInput").value;
-    if (pass === ADMIN_PASS) {
-      sessionStorage.setItem("admin_auth", "1");
-      showAdmin();
-    } else {
-      document.getElementById("loginError").style.display = "block";
-    }
-  }
-
-  function showAdmin() {
-    document.getElementById("loginScreen").style.display = "none";
-    document.getElementById("adminContent").classList.remove("hidden");
-    loadLog();
-  }
+  loadLog();
 
   let currentTab = "log";
 

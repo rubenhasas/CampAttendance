@@ -29,6 +29,8 @@
     <button class="btn btn-primary" onclick="submitManual()">Marcheaza prezent</button>
   </div>
 
+  <div id="attendanceCount" class="stats" style="margin-top:16px"></div>
+
   <div class="footer">
     <a href="admin.html">Admin</a>
     <a id="sheetLink" href="#" target="_blank">Deschide Google Sheet</a>
@@ -130,6 +132,7 @@
         }
         showBanner("ok", "\u2713 " + displayName, sub);
         vibrate();
+        loadAttendanceCount();
       } else if (data.status === "duplicate") {
         const displayName = data.name || "ID " + id;
         showBanner("duplicate", displayName + " a fost deja scanat", "Prima scanare: " + data.time);
@@ -171,6 +174,31 @@
       navigator.vibrate(200);
     }
   }
+
+  // Load current attendance count
+  function loadAttendanceCount() {
+    fetch(API_URL + "?action=attendance")
+      .then(r => r.json())
+      .then(data => {
+        const counts = data.counts || {};
+        const total = data.total || 0;
+        const days = ["Luni", "Marti", "Miercuri", "Joi", "Vineri"];
+        const now = new Date();
+        const dayIndex = now.getDay(); // 0=Sun, 1=Mon...
+        const todayName = days[dayIndex - 1];
+        const todayCount = todayName ? (counts[todayName] || 0) : 0;
+
+        const el = document.getElementById("attendanceCount");
+        if (todayName) {
+          el.innerHTML = "Prezenti azi (" + todayName + "): <strong>" + todayCount + "</strong> / " + total;
+        } else {
+          el.innerHTML = "Total inscrisi: " + total;
+        }
+      })
+      .catch(() => {});
+  }
+
+  loadAttendanceCount();
 
   // Allow Enter key on manual input
   document.getElementById("manualId").addEventListener("keydown", function(e) {
